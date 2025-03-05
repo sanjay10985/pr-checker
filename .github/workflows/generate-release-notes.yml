@@ -1,0 +1,48 @@
+name: Generate Release Notes
+
+on:
+  pull_request:
+    types: [closed] # Runs when PR is merged
+
+jobs:
+  generate-release-notes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Get PR Details
+        id: pr_details
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          PR_URL="${{ github.event.pull_request.html_url }}"
+
+          # Extract PR Type from Labels (if any)
+          PR_TYPE="Other"
+          LABELS=$(jq -r '.pull_request.labels[].name' <<< '${{ toJson(github.event.pull_request.labels) }}' || true)
+
+          if echo "$LABELS" | grep -q "feature"; then
+            PR_TYPE="✨ Feature"
+          elif echo "$LABELS" | grep -q "bug"; then
+            PR_TYPE="🐛 Bug Fix"
+          elif echo "$LABELS" | grep -q "refactor"; then
+            PR_TYPE="🔄 Refactor"
+          fi
+
+          # Format Release Notes
+          RELEASE_NOTE="- [$PR_TYPE] **$PR_TITLE** ([#${PR_NUMBER}]($PR_URL))"
+          echo "RELEASE_NOTE=$RELEASE_NOTE" >> $GITHUB_ENV
+
+      - name: Append to CHANGELOG.md
+        run: |
+          echo "$RELEASE_NOTE" >> CHANGELOG.md
+          echo "✅ Release note added: $RELEASE_NOTE"
+
+      - name: Commit & Push Changes
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git add CHANGELOG.md
+          git commit -m "📜 Update changelog for PR #${{ github.event.pull_request.number }}"
+          git push

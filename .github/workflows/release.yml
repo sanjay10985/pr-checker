@@ -27,6 +27,8 @@ jobs:
           echo "#### Merged PRs:" >> release-notes.md
           echo "" >> release-notes.md
           gh pr list --state merged --limit 10 --json title --jq '.[].title' | awk '{print "- "$0}' >> release-notes.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -36,3 +38,5 @@ jobs:
           body_path: release-notes.md
           draft: false
           prerelease: false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

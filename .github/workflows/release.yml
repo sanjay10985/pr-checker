@@ -41,16 +41,22 @@ jobs:
           echo "#### Merged PRs:" >> release-notes.md
           echo "" >> release-notes.md
 
-          if [[ -n "${{ env.LAST_TAG_DATE }}" ]]; then
-            gh pr list --state merged --json title,body,number,mergedAt \
-              --jq '.[] | select(.mergedAt > "${{ env.LAST_TAG_DATE }}") | "- **\(.title)** (#\(.number))\n  \(.body // "No description provided.")"' \
-              >> release-notes.md
-          else
-            echo "No previous tags found, listing recent PRs..." >> release-notes.md
-            gh pr list --state merged --json title,body,number \
-              --jq '.[] | "- **\(.title)** (#\(.number))\n  \(.body // "No description provided.")"' \
-              >> release-notes.md
-          fi
+          # Get list of merged PRs since the last release
+          gh api graphql -f query='
+            {
+              repository(owner: "${{ github.repository_owner }}", name: "'$(basename $GITHUB_REPOSITORY)'") {
+                pullRequests(first: 100, states: MERGED, orderBy: {field: UPDATED_AT, direction: DESC}) {
+                  nodes {
+                    number
+                    title
+                    body
+                    mergedAt
+                  }
+                }
+              }
+            }' \
+          --jq '.data.repository.pullRequests.nodes | map(select(.mergedAt > "${{ env.LAST_TAG_DATE }}")) | .[] | "- **\(.title)** ([#\(.number)])\n  \(.body // "No description provided.")"' \
+          >> release-notes.md
 
           echo "Generated release notes:"
           cat release-notes.md

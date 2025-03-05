@@ -16,10 +16,23 @@ jobs:
 
       - name: Get Latest Tag
         id: last_tag
-        run: echo "LAST_TAG=$(git describe --tags --abbrev=0 --always)" >> $GITHUB_ENV
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 --always 2>/dev/null || echo "0.0.0")
+          echo "LAST_TAG=$LAST_TAG" >> $GITHUB_ENV
+          echo "Last tag found: $LAST_TAG"
 
-      - name: Get Current Version
-        run: echo "VERSION=$(jq -r '.version' package.json)" >> $GITHUB_ENV
+      - name: Get Current Version from package.json
+        run: |
+          VERSION=$(jq -r '.version' package.json)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Current version: $VERSION"
+
+      - name: Get Last Tag Commit Date
+        id: last_tag_date
+        run: |
+          LAST_TAG_DATE=$(git log -1 --format=%aI ${{ env.LAST_TAG }} 2>/dev/null || echo "")
+          echo "LAST_TAG_DATE=$LAST_TAG_DATE" >> $GITHUB_ENV
+          echo "Last tag commit date: $LAST_TAG_DATE"
 
       - name: Generate Release Notes
         run: |
@@ -27,8 +40,20 @@ jobs:
           echo "" >> release-notes.md
           echo "#### Merged PRs:" >> release-notes.md
           echo "" >> release-notes.md
-          gh pr list --search "is:merged merged:>${{ env.LAST_TAG }}" --json title,body,number \
-          --jq '.[] | "- **\(.title)** (#\(.number))\n  \(.body // "No description provided.")"' >> release-notes.md
+
+          if [[ -n "${{ env.LAST_TAG_DATE }}" ]]; then
+            gh pr list --state merged --json title,body,number,mergedAt \
+              --jq '.[] | select(.mergedAt > "${{ env.LAST_TAG_DATE }}") | "- **\(.title)** (#\(.number))\n  \(.body // "No description provided.")"' \
+              >> release-notes.md
+          else
+            echo "No previous tags found, listing recent PRs..." >> release-notes.md
+            gh pr list --state merged --json title,body,number \
+              --jq '.[] | "- **\(.title)** (#\(.number))\n  \(.body // "No description provided.")"' \
+              >> release-notes.md
+          fi
+
+          echo "Generated release notes:"
+          cat release-notes.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
